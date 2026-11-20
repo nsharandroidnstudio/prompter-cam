@@ -9,8 +9,8 @@
 <style>
   :root{--accent:#ff3b30;--fg:#fff;--muted:#9a9a9f;--panel:#1c1c1e;--line:#2c2c2e}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
-  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  html,body{touch-action:manipulation;margin:0;height:100%;background:#000;color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+  button{touch-action:manipulation;-webkit-user-select:none;user-select:none;font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   .screen{position:fixed;inset:0;display:none;flex-direction:column}
   .screen.on{display:flex}
 
@@ -45,8 +45,8 @@
   #recBtn{width:78px;height:78px;border-radius:50%;border:4px solid #fff;display:flex;align-items:center;justify-content:center}
   #recBtn span{width:60px;height:60px;border-radius:50%;background:var(--accent);transition:all .2s}
   #recBtn.live span{width:30px;height:30px;border-radius:7px}
-  #speedBox{position:absolute;right:12px;top:calc(42% + 6px);display:flex;flex-direction:column;gap:8px}
-  #speedBox .icon{width:44px;height:44px;font-size:20px}
+  #speedBox{z-index:5;position:absolute;right:12px;top:calc(42% + 6px);display:flex;flex-direction:column;gap:8px}
+  #speedBox .icon{width:56px;height:56px;font-size:28px;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.35)}
   #speedVal{text-align:center;font-size:12px;color:#ddd;background:rgba(0,0,0,.45);border-radius:8px;padding:2px 0}
   #count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:120px;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.6);pointer-events:none}
   #hint{position:absolute;left:12px;top:calc(42% + 8px);font-size:12px;color:#ddd;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
@@ -71,7 +71,7 @@
   <textarea id="script" dir="auto" placeholder="Paste or type your script here…"></textarea>
   <div class="meta" id="wordInfo">0 words</div>
   <div class="row"><span>Text size</span><input id="size" type="range" min="20" max="56" value="32"></div>
-  <div class="row"><span>Scroll speed</span><input id="speed" type="range" min="10" max="200" value="55"></div>
+  <div class="row"><span>Scroll speed</span><input id="speed" type="range" min="5" max="150" step="5" value="25"><b id="speedLabel" style="min-width:28px;text-align:right">25</b></div>
   <div class="row"><span>Camera</span>
     <div class="seg" id="camSeg"><button data-v="user" class="sel">Front</button><button data-v="environment">Back</button></div></div>
   <div class="row"><span>Countdown</span>
@@ -87,9 +87,10 @@
   <div id="topbar"><div id="timer">00:00</div></div>
   <div id="hint">Drag text to adjust · tap to pause</div>
   <div id="speedBox">
-    <button class="icon" id="faster">+</button>
-    <div id="speedVal">55</div>
-    <button class="icon" id="slower">−</button>
+    <button class="icon" id="faster" aria-label="Faster">+</button>
+    <div id="speedVal">25</div>
+    <button class="icon" id="slower" aria-label="Slower">−</button>
+    <div id="speedVal2" style="text-align:center;font-size:11px;color:#ddd">speed</div>
   </div>
   <div id="count"></div>
   <div id="controls">
@@ -124,7 +125,7 @@
   const S = {
     facing: store.get('facing', 'user'),
     countdown: store.get('countdown', 3),
-    speed: store.get('speed', 55),          // px per second
+    speed: store.get('speed2', 25),          // px per second
     size: store.get('size', 32),
     stream: null, recorder: null, chunks: [], blob: null, mime: '',
     recording: false, scrolling: false, offset: 0, lastT: 0, startT: 0, timerId: 0, wakeLock: null
@@ -134,7 +135,7 @@
   const script = $('script');
   const DEFAULT_SCRIPT = "[הוק חלופי: תכירו את העובד החדש שלכם — והוא לא מפספס אף ישיבה]\n\n[0:00–0:04 | הוק]\nתדמיינו עובד AI שמצטרף לישיבות שלכם, משתתף בשיחה, ובזמן שאתם מדברים — אשכרה מתחיל לעבוד.\n\n[0:04–0:10]\nAnthropic השיקו את Claude Meetings, וזה לא עוד AI שמסכם לכם פגישה אחרי שהיא נגמרת.\n\n[0:10–0:20]\nקלוד ממש נכנס לישיבה, מקשיב לכולם, אפשר לפנות אליו, לשאול שאלות, והוא יכול ליצור מסמכים, לבנות תוכניות ואפילו לוחות עבודה — תוך כדי הפגישה.\n\n[0:20–0:28]\nאתם מדברים על פרויקט? הוא מתחיל לבנות אותו. צריכים מידע? הוא יכול להביא אותו. צריכים לסכם החלטות? הוא כבר על זה.\n\n[0:28–0:35 | סיום]\nזה כבר לא AI שאתם פותחים אחרי העבודה. זה AI שיושב איתכם בצוות — ועובד בזמן שאתם עובדים.";
   script.value = store.get('script_v2', DEFAULT_SCRIPT);
-  $('size').value = S.size; $('speed').value = S.speed;
+  $('size').value = S.size; $('speed').value = S.speed; $('speedLabel').textContent = S.speed;
 
   const countWords = () => {
     const w = script.value.trim().split(/\s+/).filter(Boolean).length;
@@ -145,7 +146,7 @@
   countWords();
 
   $('size').addEventListener('input', e => { S.size = +e.target.value; store.set('size', S.size); });
-  $('speed').addEventListener('input', e => { S.speed = +e.target.value; store.set('speed', S.speed); });
+  $('speed').addEventListener('input', e => { S.speed = +e.target.value; store.set('speed2', S.speed); $('speedLabel').textContent = S.speed; });
 
   const bindSeg = (id, key, cast) => {
     const seg = $(id);
@@ -232,9 +233,10 @@
     S.scrolling = on; S.lastT = 0;
     if (on) requestAnimationFrame(tick);
   }
-  const adjSpeed = d => { S.speed = Math.max(10, Math.min(200, S.speed + d)); store.set('speed', S.speed); $('speedVal').textContent = S.speed; $('speed').value = S.speed; };
-  $('faster').onclick = () => adjSpeed(10);
-  $('slower').onclick = () => adjSpeed(-10);
+  const adjSpeed = d => { S.speed = Math.max(5, Math.min(150, S.speed + d)); store.set('speed2', S.speed); $('speedVal').textContent = S.speed; $('speed').value = S.speed; $('speedLabel').textContent = S.speed; toast('Speed ' + S.speed, 800); };
+  const bindTap = (el, fn) => el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fn(); });
+  bindTap($('faster'), () => adjSpeed(5));
+  bindTap($('slower'), () => adjSpeed(-5));
 
   // drag to reposition, tap to pause/resume
   let drag = null;
