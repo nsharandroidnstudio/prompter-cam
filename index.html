@@ -132,7 +132,8 @@
 
   // ---------- Setup screen ----------
   const script = $('script');
-  script.value = store.get('script', '');
+  const DEFAULT_SCRIPT = "[הוק חלופי: תכירו את העובד החדש שלכם — והוא לא מפספס אף ישיבה]\n\n[0:00–0:04 | הוק]\nתדמיינו עובד AI שמצטרף לישיבות שלכם, משתתף בשיחה, ובזמן שאתם מדברים — אשכרה מתחיל לעבוד.\n\n[0:04–0:10]\nAnthropic השיקו את Claude Meetings, וזה לא עוד AI שמסכם לכם פגישה אחרי שהיא נגמרת.\n\n[0:10–0:20]\nקלוד ממש נכנס לישיבה, מקשיב לכולם, אפשר לפנות אליו, לשאול שאלות, והוא יכול ליצור מסמכים, לבנות תוכניות ואפילו לוחות עבודה — תוך כדי הפגישה.\n\n[0:20–0:28]\nאתם מדברים על פרויקט? הוא מתחיל לבנות אותו. צריכים מידע? הוא יכול להביא אותו. צריכים לסכם החלטות? הוא כבר על זה.\n\n[0:28–0:35 | סיום]\nזה כבר לא AI שאתם פותחים אחרי העבודה. זה AI שיושב איתכם בצוות — ועובד בזמן שאתם עובדים.";
+  script.value = store.get('script_v2', DEFAULT_SCRIPT);
   $('size').value = S.size; $('speed').value = S.speed;
 
   const countWords = () => {
@@ -140,7 +141,7 @@
     const mins = w / 150; // ~150 wpm speaking pace
     $('wordInfo').textContent = w ? `${w} words · about ${mins < 1 ? Math.max(1, Math.round(mins * 60)) + ' sec' : mins.toFixed(1) + ' min'} to read` : '0 words';
   };
-  script.addEventListener('input', () => { store.set('script', script.value); countWords(); });
+  script.addEventListener('input', () => { store.set('script_v2', script.value); countWords(); });
   countWords();
 
   $('size').addEventListener('input', e => { S.size = +e.target.value; store.set('size', S.size); });
