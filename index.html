@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>Prompter Cam</title>
+<style>
+  :root{--accent:#ff3b30;--fg:#fff;--muted:#9a9a9f;--panel:#1c1c1e;--line:#2c2c2e}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+
+  /* ---------- Script screen ---------- */
+  #setup{padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);gap:14px;overflow:auto}
+  h1{margin:0;font-size:22px}
+  .sub{color:var(--muted);font-size:14px;margin-top:2px}
+  textarea{flex:1;min-height:200px;width:100%;resize:none;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:14px;font-size:17px;line-height:1.45;outline:none}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel);border-radius:12px;padding:10px 14px;font-size:15px}
+  .row input[type=range]{flex:1;max-width:55%;accent-color:var(--accent)}
+  .seg{display:flex;background:#2c2c2e;border-radius:9px;padding:2px}
+  .seg button{padding:6px 12px;border-radius:7px;font-size:14px;color:var(--muted)}
+  .seg button.sel{background:#636366;color:#fff}
+  .primary{background:var(--accent);color:#fff;font-weight:600;font-size:17px;padding:15px;border-radius:14px;width:100%}
+  .meta{color:var(--muted);font-size:13px;text-align:center}
+
+  /* ---------- Record screen ---------- */
+  #rec{background:#000}
+  #preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #preview.mirror{transform:scaleX(-1)}
+  #prompter{position:absolute;left:0;right:0;top:0;height:42%;padding-top:env(safe-area-inset-top);
+    background:linear-gradient(rgba(0,0,0,.72) 75%,rgba(0,0,0,0));overflow:hidden;touch-action:none}
+  #prompterText{position:absolute;left:18px;right:18px;top:0;font-weight:600;line-height:1.35;white-space:pre-wrap;text-align:center;will-change:transform;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  #prompterText.flip{transform-origin:center}
+  #guide{position:absolute;left:0;right:0;height:2px;background:rgba(255,59,48,.55);pointer-events:none}
+  #topbar{position:absolute;top:calc(42% + 6px);left:0;right:0;display:flex;justify-content:center;pointer-events:none}
+  #timer{background:rgba(0,0,0,.5);padding:4px 10px;border-radius:8px;font-variant-numeric:tabular-nums;font-size:15px}
+  #timer.live{background:var(--accent)}
+  #controls{position:absolute;left:0;right:0;bottom:0;padding:16px 20px calc(env(safe-area-inset-bottom) + 18px);
+    display:flex;align-items:center;justify-content:space-between;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.6))}
+  .icon{width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+  #recBtn{width:78px;height:78px;border-radius:50%;border:4px solid #fff;display:flex;align-items:center;justify-content:center}
+  #recBtn span{width:60px;height:60px;border-radius:50%;background:var(--accent);transition:all .2s}
+  #recBtn.live span{width:30px;height:30px;border-radius:7px}
+  #speedBox{position:absolute;right:12px;top:calc(42% + 6px);display:flex;flex-direction:column;gap:8px}
+  #speedBox .icon{width:44px;height:44px;font-size:20px}
+  #speedVal{text-align:center;font-size:12px;color:#ddd;background:rgba(0,0,0,.45);border-radius:8px;padding:2px 0}
+  #count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:120px;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.6);pointer-events:none}
+  #hint{position:absolute;left:12px;top:calc(42% + 8px);font-size:12px;color:#ddd;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
+
+  /* ---------- Review screen ---------- */
+  #review{padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px);gap:12px}
+  #playback{flex:1;min-height:0;width:100%;background:#111;border-radius:14px;object-fit:contain}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ghost{background:var(--panel);padding:14px;border-radius:14px;font-weight:600}
+  #msg{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 110px);transform:translateX(-50%);background:rgba(40,40,42,.95);padding:10px 14px;border-radius:12px;font-size:14px;max-width:90%;text-align:center;display:none;z-index:9}
+  .err{background:#3a1d1d;border:1px solid #6b2a2a;border-radius:12px;padding:12px;font-size:14px;line-height:1.4;display:none}
+</style>
+</head>
+<body>
+
+<!-- 1. Script -->
+<section id="setup" class="screen on">
+  <div>
+    <h1>Prompter Cam</h1>
+    <div class="sub">Paste your script, then record yourself reading it. Text in [brackets] is hidden while recording.</div>
+  </div>
+  <textarea id="script" dir="auto" placeholder="Paste or type your script here…"></textarea>
+  <div class="meta" id="wordInfo">0 words</div>
+  <div class="row"><span>Text size</span><input id="size" type="range" min="20" max="56" value="32"></div>
+  <div class="row"><span>Scroll speed</span><input id="speed" type="range" min="10" max="200" value="55"></div>
+  <div class="row"><span>Camera</span>
+    <div class="seg" id="camSeg"><button data-v="user" class="sel">Front</button><button data-v="environment">Back</button></div></div>
+  <div class="row"><span>Countdown</span>
+    <div class="seg" id="cdSeg"><button data-v="0">Off</button><button data-v="3" class="sel">3s</button><button data-v="5">5s</button></div></div>
+  <div class="err" id="camErr"></div>
+  <button class="primary" id="go">Open camera</button>
+</section>
+
+<!-- 2. Record -->
+<section id="rec" class="screen">
+  <video id="preview" playsinline autoplay muted></video>
+  <div id="prompter"><div id="prompterText" dir="auto"></div><div id="guide"></div></div>
+  <div id="topbar"><div id="timer">00:00</div></div>
+  <div id="hint">Drag text to adjust · tap to pause</div>
+  <div id="speedBox">
+    <button class="icon" id="faster">+</button>
+    <div id="speedVal">55</div>
+    <button class="icon" id="slower">−</button>
+  </div>
+  <div id="count"></div>
+  <div id="controls">
+    <button class="icon" id="back">Script</button>
+    <button id="recBtn" aria-label="Record"><span></span></button>
+    <button class="icon" id="flip">Flip</button>
+  </div>
+</section>
+
+<!-- 3. Review -->
+<section id="review" class="screen">
+  <video id="playback" playsinline controls></video>
+  <div class="meta" id="fileInfo"></div>
+  <button class="primary" id="share">Send video</button>
+  <div class="btns">
+    <button class="ghost" id="save">Save to phone</button>
+    <button class="ghost" id="retake">Record again</button>
+  </div>
+</section>
+
+<div id="msg"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('pc_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('pc_' + k, JSON.stringify(v)); } catch {} }
+  };
+
+  // ---------- State ----------
+  const S = {
+    facing: store.get('facing', 'user'),
+    countdown: store.get('countdown', 3),
+    speed: store.get('speed', 55),          // px per second
+    size: store.get('size', 32),
+    stream: null, recorder: null, chunks: [], blob: null, mime: '',
+    recording: false, scrolling: false, offset: 0, lastT: 0, startT: 0, timerId: 0, wakeLock: null
+  };
+
+  // ---------- Setup screen ----------
+  const script = $('script');
+  script.value = store.get('script', '');
+  $('size').value = S.size; $('speed').value = S.speed;
+
+  const countWords = () => {
+    const w = script.value.trim().split(/\s+/).filter(Boolean).length;
+    const mins = w / 150; // ~150 wpm speaking pace
+    $('wordInfo').textContent = w ? `${w} words · about ${mins < 1 ? Math.max(1, Math.round(mins * 60)) + ' sec' : mins.toFixed(1) + ' min'} to read` : '0 words';
+  };
+  script.addEventListener('input', () => { store.set('script', script.value); countWords(); });
+  countWords();
+
+  $('size').addEventListener('input', e => { S.size = +e.target.value; store.set('size', S.size); });
+  $('speed').addEventListener('input', e => { S.speed = +e.target.value; store.set('speed', S.speed); });
+
+  const bindSeg = (id, key, cast) => {
+    const seg = $(id);
+    seg.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('sel', String(S[key]) === b.dataset.v);
+      b.onclick = () => {
+        S[key] = cast(b.dataset.v); store.set(key, S[key]);
+        seg.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+      };
+    });
+  };
+  bindSeg('camSeg', 'facing', String);
+  bindSeg('cdSeg', 'countdown', Number);
+
+  const show = id => document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  const toast = (t, ms = 2200) => { const m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = 'none', ms); };
+
+  // ---------- Camera ----------
+  async function startCamera() {
+    stopCamera();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser can’t open the camera from this page. Open the page over https:// in Safari or Chrome.');
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: S.facing, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+    const v = $('preview');
+    v.srcObject = S.stream;
+    v.classList.toggle('mirror', S.facing === 'user');
+    await v.play().catch(() => {});
+  }
+  function stopCamera() { S.stream?.getTracks().forEach(t => t.stop()); S.stream = null; }
+
+  $('go').onclick = async () => {
+    if (!script.value.trim()) { script.focus(); toast('Add your script first'); return; }
+    $('camErr').style.display = 'none';
+    try {
+      await startCamera();
+      preparePrompter();
+      show('rec');
+      keepAwake();
+    } catch (e) {
+      const err = $('camErr');
+      err.textContent = e.name === 'NotAllowedError'
+        ? 'Camera or microphone access was blocked. Allow it in your browser’s site settings, then try again.'
+        : (e.message || 'Could not open the camera.');
+      err.style.display = 'block';
+    }
+  };
+
+  $('flip').onclick = async () => {
+    if (S.recording) return toast('Stop recording to switch camera');
+    S.facing = S.facing === 'user' ? 'environment' : 'user'; store.set('facing', S.facing);
+    try { await startCamera(); } catch { toast('Could not switch camera'); }
+  };
+
+  $('back').onclick = () => {
+    if (S.recording) return toast('Stop recording first');
+    stopCamera(); releaseAwake(); show('setup');
+  };
+
+  // ---------- Prompter ----------
+  const pText = $('prompterText'), pBox = $('prompter'), guide = $('guide');
+  function guideY() { return pBox.clientHeight * 0.38; }
+  function preparePrompter() {
+    // hide stage directions like [0:00–0:04 | Hook] from the prompter
+    pText.textContent = script.value.replace(/\[[^\]]*\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    pText.style.fontSize = S.size + 'px';
+    $('speedVal').textContent = S.speed;
+    requestAnimationFrame(() => { guide.style.top = guideY() + 'px'; S.offset = 0; renderScroll(); });
+  }
+  function renderScroll() {
+    // text starts with its first line on the guide line and moves up
+    pText.style.transform = `translateY(${guideY() - S.offset - S.size * 0.6}px)`;
+  }
+  function tick(t) {
+    if (!S.scrolling) return;
+    const dt = S.lastT ? (t - S.lastT) / 1000 : 0; S.lastT = t;
+    const max = pText.scrollHeight;
+    S.offset = Math.min(max, S.offset + S.speed * dt);
+    renderScroll();
+    requestAnimationFrame(tick);
+  }
+  function setScrolling(on) {
+    S.scrolling = on; S.lastT = 0;
+    if (on) requestAnimationFrame(tick);
+  }
+  const adjSpeed = d => { S.speed = Math.max(10, Math.min(200, S.speed + d)); store.set('speed', S.speed); $('speedVal').textContent = S.speed; $('speed').value = S.speed; };
+  $('faster').onclick = () => adjSpeed(10);
+  $('slower').onclick = () => adjSpeed(-10);
+
+  // drag to reposition, tap to pause/resume
+  let drag = null;
+  pBox.addEventListener('pointerdown', e => { drag = { y: e.clientY, o: S.offset, moved: false, was: S.scrolling }; setScrolling(false); pBox.setPointerCapture(e.pointerId); });
+  pBox.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 6) drag.moved = true;
+    if (drag.moved) { S.offset = Math.max(0, Math.min(pText.scrollHeight, drag.o - dy)); renderScroll(); }
+  });
+  pBox.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const resume = drag.moved ? drag.was : !drag.was;
+    drag = null;
+    if (S.recording) { setScrolling(resume); if (!resume) toast('Prompter paused · tap to resume', 1400); }
+  });
+
+  // ---------- Recording ----------
+  function pickMime() {
+    const opts = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    if (!window.MediaRecorder) return null;
+    return opts.find(m => MediaRecorder.isTypeSupported?.(m)) || '';
+  }
+
+  const fmt = s => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+  async function countdown(n) {
+    const c = $('count');
+    for (let i = n; i > 0; i--) { c.textContent = i; c.style.display = 'flex'; await new Promise(r => setTimeout(r, 1000)); }
+    c.style.display = 'none';
+  }
+
+  let busy = false;
+  $('recBtn').onclick = async () => {
+    if (busy) return;
+    if (S.recording) return stopRecording();
+    const mime = pickMime();
+    if (mime === null) return toast('Recording isn’t supported in this browser');
+    busy = true;
+    S.offset = 0; renderScroll();
+    if (S.countdown) await countdown(S.countdown);
+    try {
+      S.chunks = [];
+      S.recorder = new MediaRecorder(S.stream, mime ? { mimeType: mime, videoBitsPerSecond: 5_000_000 } : undefined);
+      S.mime = S.recorder.mimeType || mime || 'video/webm';
+      S.recorder.ondataavailable = e => e.data?.size && S.chunks.push(e.data);
+      S.recorder.onstop = finishRecording;
+      S.recorder.start(1000);
+    } catch (e) { busy = false; return toast('Could not start recording: ' + e.message, 3500); }
+    S.recording = true; busy = false;
+    $('recBtn').classList.add('live'); $('timer').classList.add('live');
+    $('hint').style.display = 'none';
+    S.startT = Date.now();
+    $('timer').textContent = '00:00';
+    S.timerId = setInterval(() => $('timer').textContent = fmt((Date.now() - S.startT) / 1000), 250);
+    setScrolling(true);
+  };
+
+  function stopRecording() {
+    S.recording = false; setScrolling(false);
+    clearInterval(S.timerId);
+    $('recBtn').classList.remove('live'); $('timer').classList.remove('live');
+    if (S.recorder?.state !== 'inactive') S.recorder.stop();
+  }
+
+  function finishRecording() {
+    S.blob = new Blob(S.chunks, { type: S.mime.split(';')[0] });
+    const pb = $('playback');
+    if (pb.src) URL.revokeObjectURL(pb.src);
+    pb.src = URL.createObjectURL(S.blob);
+    $('fileInfo').textContent = `${fmt((Date.now() - S.startT) / 1000)} · ${(S.blob.size / 1048576).toFixed(1)} MB · ${ext().toUpperCase()}`;
+    stopCamera();
+    show('review');
+  }
+
+  // ---------- Share / save ----------
+  const ext = () => S.mime.includes('mp4') ? 'mp4' : 'webm';
+  const fileName = () => `video-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${ext()}`;
+
+  $('share').onclick = async () => {
+    if (!S.blob) return;
+    const file = new File([S.blob], fileName(), { type: S.blob.type });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'My video' }); }
+      catch (e) { if (e.name !== 'AbortError') toast('Sharing failed — try “Save to phone” and send it from your gallery', 3500); }
+    } else {
+      toast('This browser can’t share files directly — saving instead', 2500);
+      save();
+    }
+  };
+
+  function save() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(S.blob); a.download = fileName();
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  $('save').onclick = save;
+
+  $('retake').onclick = async () => {
+    $('playback').pause();
+    try { await startCamera(); preparePrompter(); $('timer').textContent = '00:00'; $('hint').style.display = ''; show('rec'); }
+    catch { show('setup'); }
+  };
+
+  // ---------- Keep screen on ----------
+  async function keepAwake() { try { S.wakeLock = await navigator.wakeLock?.request('screen'); } catch {} }
+  function releaseAwake() { try { S.wakeLock?.release(); } catch {} S.wakeLock = null; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && $('rec').classList.contains('on')) keepAwake();
+    if (document.visibilityState === 'hidden' && S.recording) stopRecording();
+  });
+  window.addEventListener('resize', () => { if ($('rec').classList.contains('on')) { guide.style.top = guideY() + 'px'; renderScroll(); } });
+})();
+</script>
+</body>
+</html>
